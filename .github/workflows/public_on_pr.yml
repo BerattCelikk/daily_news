@@ -1,18 +1,24 @@
 name: On PR from AutoNews
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
 
 jobs:
   label-and-check:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout base
         uses: actions/checkout@v4
 
       - name: Add label 'auto-news'
         uses: actions-ecosystem/action-add-labels@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: auto-news
