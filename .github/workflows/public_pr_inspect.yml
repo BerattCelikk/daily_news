@@ -1,0 +1,60 @@
+name: Inspect AutoNews PR
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  inspect-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print PR info
+        run: |
+          echo "Repository: ${{ github.repository }}"
+          echo "PR #: ${{ github.event.number }}"
+          echo "Head repo: ${{ github.event.pull_request.head.repo.full_name }}"
+          echo "Head ref: ${{ github.event.pull_request.head.ref }}"
+
+      - name: Checkout PR head into pr_head/
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: pr_head
+
+      - name: List top-level files in PR head
+        run: |
+          echo "=== Top-level of pr_head ==="
+          ls -la pr_head || true
+          echo "=== articles directory (if any) ==="
+          ls -la pr_head/articles || true
+
+      - name: Find auto-news markdown files
+        run: |
+          find pr_head -type f -name "*auto-news*.md" -print || true
+
+      - name: Show first auto-news file (if present)
+        run: |
+          file=$(find pr_head -type f -name "*auto-news*.md" | head -n1 || true)
+          if [ -n "$file" ]; then
+            echo "--- Showing $file ---"
+            sed -n '1,200p' "$file" || true
+          else
+            echo "No auto-news files found in PR head"
+          fi
+
+      - name: Comment on PR with result
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          file=$(find pr_head -type f -name "*auto-news*.md" | head -n1 || true)
+          body="Automated inspection: found file: ${file:-none}"
+          echo "Posting comment: $body"
+          curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.number }}/comments" \
+            -d "{\"body\": \"${body}\"}" || true
