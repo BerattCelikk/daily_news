@@ -1,0 +1,43 @@
+name: Label autonews on push
+
+on:
+  push:
+    branches:
+      - 'autonews/**'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  add-label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Find PR for branch
+        id: find_pr
+        run: |
+          BRANCH=${GITHUB_REF#refs/heads/}
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          # Use GitHub API to find open PR with this head ref
+          pr=$(curl -s -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls?state=open" | jq -r ".[] | select(.head.ref==\"${BRANCH}\") | .number" | head -n1 || true)
+          if [ -z "$pr" ]; then
+            echo "pr_number=0" >> $GITHUB_OUTPUT
+          else
+            echo "pr_number=$pr" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Add label via REST API
+        if: steps.find_pr.outputs.pr_number != '0'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.find_pr.outputs.pr_number }}
+        run: |
+          echo "Adding label 'autonews' to PR #${PR_NUMBER}"
+          curl -s -X POST \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" \
+            -d '["autonews"]' || true
